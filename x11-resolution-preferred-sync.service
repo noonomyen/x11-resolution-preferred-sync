@@ -1,0 +1,18 @@
+[Unit]
+Description=Synchronize display resolution by preferred settings for X11 sessions
+After=graphical-session.target
+Wants=graphical-session.target
+
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/home/@USER@/.local/bin/x11-resolution-preferred-sync
+Restart=always
+RestartSec=3
+
+Environment=DISPLAY=@DISPLAY@
+Environment=XAUTHORITY=/home/@USER@/.Xauthority
+
+[Install]
+WantedBy=default.target

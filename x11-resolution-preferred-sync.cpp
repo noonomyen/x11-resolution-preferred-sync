@@ -2,7 +2,6 @@
 #include <thread>
 #include <chrono>
 #include <cstdlib>
-#include <string>
 #include <optional>
 
 #include <sys/wait.h>

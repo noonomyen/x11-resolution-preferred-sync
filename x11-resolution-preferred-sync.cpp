@@ -8,12 +8,11 @@
 #include <X11/Xlib.h>
 #include <X11/extensions/Xrandr.h>
 
-static const char* spice_vdagentd_restart_define =
 #ifndef DISABLE_SPICE_VDAGENTD_RESTART
-    "spice-vdagentd restart is enabled";
-static void restart_spice_vdagentd();
+    static const char* spice_vdagentd_restart_define = "spice-vdagentd restart is enabled";
+    static void restart_spice_vdagentd();
 #else
-    "spice-vdagentd restart is disabled";
+    static const char* spice_vdagentd_restart_define = "spice-vdagentd restart is disabled";
 #endif
 
 struct Profile {
@@ -21,13 +20,24 @@ struct Profile {
     unsigned int height;
 };
 
+#ifndef DISABLE_XRANDR_AUTO_COMMAND
+    #ifndef XRANDR_OUTPUT
+        #define XRANDR_OUTPUT "Virtual-1"
+    #endif
+    static const char* resolution_setter = "resolution setter is xrandr auto command (" XRANDR_OUTPUT ")";
+    static void systemXRandrAutoCommand();
+#else
+    static const char* resolution_setter = "resolution setter is XRRSetCrtcConfig";
+    static bool setResolution(Display* display, Window root, Profile& profile);
+#endif
+
 static std::optional<Profile> getResolution(Display* display, Window root);
 static std::optional<Profile> getPreferredResolution(Display* display, Window root);
-static bool setResolution(Display* display, Window root, Profile& profile);
 
 int main() {
     std::cout << "[INFO] X11 Resolution Preferred Sync" << std::endl;
     std::cout << "[INFO] " << spice_vdagentd_restart_define << std::endl;
+    std::cout << "[INFO] " << resolution_setter << std::endl;
 
     Display *display = XOpenDisplay(nullptr);
     if (!display) {
@@ -78,12 +88,16 @@ int main() {
                   << currentRes->width << "x" << currentRes->height
                   << " to " << preferredRes->width << "x" << preferredRes->height << std::endl;
 
+        #ifndef DISABLE_XRANDR_AUTO_COMMAND
+        systemXRandrAutoCommand();
+        #else
         if (setResolution(display, root, *preferredRes)) {
             std::cout << "[INFO] Resolution changed successfully." << std::endl;
         } else {
             std::cerr << "[ERROR] Failed to set preferred resolution." << std::endl;
             return;
         }
+        #endif
 
         #ifndef DISABLE_SPICE_VDAGENTD_RESTART
         restart_spice_vdagentd();
@@ -185,6 +199,7 @@ static std::optional<Profile> getPreferredResolution(Display* display, Window ro
     return result;
 }
 
+#ifdef DISABLE_XRANDR_AUTO_COMMAND
 static bool setResolution(Display* display, Window root, Profile& profile) {
     XRRScreenResources* res = XRRGetScreenResourcesCurrent(display, root);
     if (!res) {
@@ -269,6 +284,7 @@ static bool setResolution(Display* display, Window root, Profile& profile) {
 
     return success;
 }
+#endif
 
 #ifndef DISABLE_SPICE_VDAGENTD_RESTART
 static void restart_spice_vdagentd() {
@@ -287,6 +303,28 @@ static void restart_spice_vdagentd() {
             else std::cerr << "[ERROR] systemctl exit code: " << exit_code << std::endl;
         } else {
             std::cerr << "[ERROR] systemctl terminated abnormally" << std::endl;
+        }
+    }).detach();
+}
+#endif
+
+#ifndef DISABLE_XRANDR_AUTO_COMMAND
+static void systemXRandrAutoCommand() {
+    std::this_thread::sleep_for(std::chrono::milliseconds{250});
+
+    std::cout << "[INFO] Executing xrandr auto" << std::endl;
+
+    std::thread([] {
+        int ret = std::system("xrandr --output " XRANDR_OUTPUT " --auto");
+
+        if (ret == -1) std::cerr << "[ERROR] Failed to execute xrandr auto" << std::endl;
+
+        if (WIFEXITED(ret)) {
+            int exit_code = WEXITSTATUS(ret);
+            if (exit_code == 0) std::cout << "[INFO] xrandr auto executed successfully" << std::endl;
+            else std::cerr << "[ERROR] xrandr exit code: " << exit_code << std::endl;
+        } else {
+            std::cerr << "[ERROR] xrandr terminated abnormally" << std::endl;
         }
     }).detach();
 }

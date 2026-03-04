@@ -1,0 +1,33 @@
+#!/bin/sh
+
+NODELAY=0
+for arg in "$@"; do
+    if [[ "$arg" == "--nodelay" ]]; then
+        NODELAY=1
+        break
+    fi
+done
+
+clear_buffer() {
+    while IFS= read -r -t 0.001 line; do
+        :
+    done
+}
+
+xev -root -event randr | while IFS= read -r line; do
+    if [[ "$line" == *"XRROutputChangeNotifyEvent"* ]]; then
+        read -r output_line
+
+        output=$(echo "$output_line" | grep -oP "output \K[^,]+")
+        echo "output: $output"
+
+        xrandr --output $output --auto
+        echo "xrandr done"
+
+        if [[ $NODELAY -eq 0 ]]; then
+            echo "delay 2s"
+            sleep 2
+            clear_buffer
+        fi
+    fi
+done

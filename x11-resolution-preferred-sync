@@ -1,8 +1,20 @@
 #!/bin/sh
 
+LOCK_DIR="/run/user/$(id -u)"
+if [ -d "$LOCK_DIR" ]; then
+    exec 9>"$LOCK_DIR/x11-resolution-preferred-sync.lock"
+else
+    exec 9>"/tmp/x11-resolution-preferred-sync.lock"
+fi
+
+if ! flock -n 9; then
+    echo "Another instance is already running."
+    exit 1
+fi
+
 NODELAY=0
 for arg in "$@"; do
-    if [[ "$arg" == "--nodelay" ]]; then
+    if [ "$arg" = "--nodelay" ]; then
         NODELAY=1
         break
     fi
@@ -15,16 +27,16 @@ clear_buffer() {
 }
 
 xev -root -event randr | while IFS= read -r line; do
-    if [[ "$line" == *"XRROutputChangeNotifyEvent"* ]]; then
+    if echo "$line" | grep -q "XRROutputChangeNotifyEvent"; then
         read -r output_line
 
         output=$(echo "$output_line" | grep -oP "output \K[^,]+")
         echo "output: $output"
 
-        xrandr --output $output --auto
+        xrandr --output "$output" --auto
         echo "xrandr done"
 
-        if [[ $NODELAY -eq 0 ]]; then
+        if [ $NODELAY -eq 0 ]; then
             echo "delay 2s"
             sleep 2
             clear_buffer
